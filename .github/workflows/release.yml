@@ -1,0 +1,32 @@
+name: Release plugin
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m compileall -q .
+      - run: python tools/build_release.py
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+      - name: Publish distribution package
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.PLUGIN_DISTRIBUTION_TOKEN }}
+        run: |
+          if [ -n "$GH_TOKEN" ]; then
+            python tools/publish_distribution.py "$GITHUB_REF_NAME"
+          else
+            echo '::warning::Set PLUGIN_DISTRIBUTION_TOKEN to publish distribution packages automatically. Manual publishing: python3 tools/publish_distribution.py TAG'
+          fi
