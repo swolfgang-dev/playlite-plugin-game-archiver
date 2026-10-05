@@ -71,3 +71,48 @@ class ArchiverPluginTests(unittest.TestCase):
             self.assertTrue(window.games[0]['IsInstalled'])
             self.assertNotIn('ArchivePath', window.games[0])
         window.close()
+
+    def test_batch_archives_multiple_games_and_restores_them(self):
+        data = self.root / 'data'
+        data.mkdir()
+        games = []
+        for name in ('First', 'Second'):
+            source = self.root / 'games' / name
+            source.mkdir(parents=True)
+            (source / 'game.exe').write_bytes(name.encode())
+            games.append(dict(Id=name, Name=name, InstallDirectory=str(source), IsInstalled=True))
+        (data / 'library.json').write_text(json.dumps(games))
+        self.settings.setValue('archiveRoots', [str(self.root / 'archives')])
+        window = LibraryWindow(data)
+        window.game_detection.stop()
+        with patch.object(self.module.QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes), patch.object(self.module.QInputDialog, 'getItem', return_value=(str(self.root / 'archives'), True)):
+            self.assertTrue(self.plugin.transfer_games(window, games, False))
+            self.assertTrue(all(game.get('ArchivePath') for game in window.games))
+            self.assertTrue(self.plugin.transfer_games(window, list(window.games), True))
+            self.assertTrue(all(not game.get('ArchivePath') for game in window.games))
+        for game in games:
+            self.assertTrue(Path(game['InstallDirectory']).is_dir())
+        window.close()
+
+    def test_batch_reports_one_collision_and_still_archives_other_games(self):
+        data = self.root / 'data'
+        data.mkdir()
+        games = []
+        for name in ('First', 'Second'):
+            source = self.root / 'games' / name
+            source.mkdir(parents=True)
+            (source / 'game.exe').write_bytes(name.encode())
+            games.append(dict(Id=name, Name=name, InstallDirectory=str(source)))
+        (data / 'library.json').write_text(json.dumps(games))
+        archives = self.root / 'archives'
+        (archives / 'First').mkdir(parents=True)
+        self.settings.setValue('archiveRoots', [str(archives)])
+        window = LibraryWindow(data)
+        window.game_detection.stop()
+        with patch.object(self.module.QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes), patch.object(self.module.QInputDialog, 'getItem', return_value=(str(archives), True)), patch.object(self.module, 'show_warning') as warning:
+            self.assertFalse(self.plugin.transfer_games(window, games, False))
+            warning.assert_called_once()
+        self.assertTrue(Path(games[0]['InstallDirectory']).is_dir())
+        self.assertFalse(Path(games[1]['InstallDirectory']).exists())
+        self.assertTrue(window.games[1].get('ArchivePath'))
+        window.close()
