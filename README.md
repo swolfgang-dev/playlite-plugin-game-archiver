@@ -23,7 +23,7 @@ library record is committed is that verified original removed. Interrupted
 uncommitted quarantines are recovered before a later transfer. Recovery copies
 are retained if cleanup fails.
 
-Playing an archived game offers to restore it to its original location, then
+Playing an archived game automatically restores it to its original location, then
 launches it after restoration succeeds. Executable and Wine prefix paths stay
 unchanged. Archive information and an archive icon appear in Playlite's game
 view. The editor can record an existing archive manually; editing those fields

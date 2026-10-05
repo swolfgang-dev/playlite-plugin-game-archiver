@@ -94,8 +94,6 @@ class Plugin(GenericPlugin):
             return False
         if not game.get('ArchivePath'):
             return True
-        if QMessageBox.question(window, 'Restore game', 'Restore this archived game to its original location before launching?') != QMessageBox.StandardButton.Yes:
-            return False
         return self.transfer_games(window, [game], True, confirm=False)
 
     def transfer(self, window, game, restore):

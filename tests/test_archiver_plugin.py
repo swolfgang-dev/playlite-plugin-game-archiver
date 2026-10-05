@@ -116,3 +116,11 @@ class ArchiverPluginTests(unittest.TestCase):
         self.assertFalse(Path(games[1]['InstallDirectory']).exists())
         self.assertTrue(window.games[1].get('ArchivePath'))
         window.close()
+
+    def test_play_restores_automatically_without_an_extra_confirmation(self):
+        game = dict(Id='a', Name='Example', ArchivePath='/archive/Example')
+        window = SimpleNamespace()
+        with patch.object(self.plugin, 'transfer_games', return_value=True) as transfer, patch.object(self.module.QMessageBox, 'question') as question:
+            self.assertTrue(self.plugin.before_launch(window, game))
+            transfer.assert_called_once_with(window, [game], True, confirm=False)
+            question.assert_not_called()
