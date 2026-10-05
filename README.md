@@ -8,7 +8,7 @@ Requires Playlite 0.2.0 or later, plugin API 1.
 
 ## Installation
 
-Authenticate to GitHub with `gh auth login` (repositories are private), then:
+Install from the public GitHub release:
 
 ```sh
 playlite-plugins install swolfgang-dev/playlite-plugin-game-archiver
@@ -44,6 +44,4 @@ plugin; its separate tool installer downloads/builds them when requested.
 
 ## Distribution
 
-Packages are published separately to `swolfgang-dev/playlite-plugin-game-archiver-releases`. Its visibility controls anonymous browsing and downloads independently of this private development repository.
-
-After updating the manifest version, publish with `python3 tools/publish_distribution.py vVERSION` using your authenticated GitHub CLI. For automatic publishing on version tags, configure the repository Actions secret `PLUGIN_DISTRIBUTION_TOKEN` with a fine-grained token granting Contents read/write access to the distribution repository. The workflow never changes repository visibility.
+Packages are published directly as GitHub releases in this source repository. Tag the manifest version (for example, `v1.1.2`) to build and publish `plugin.zip` and its checksums automatically.
