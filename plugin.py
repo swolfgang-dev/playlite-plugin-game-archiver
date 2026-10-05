@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import threading
 from PyQt6.QtCore import QObject, QSettings, QThreadPool, Qt, pyqtSignal
-from PyQt6.QtWidgets import (QWidget, QFormLayout, QPlainTextEdit,
+from PyQt6.QtWidgets import (QWidget, QFormLayout, QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView,
     QInputDialog, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox)
 from playlite.providers import GenericPlugin, IntegrationPlugin
 from playlite.lifecycle import run_dialog, show_warning, choose_directory
@@ -25,23 +25,53 @@ class Plugin(GenericPlugin):
     def create_settings(self, parent=None):
         widget = QWidget(parent)
         form = QFormLayout(widget)
-        widget.destinations = QPlainTextEdit('\n'.join(self.archive_roots()))
-        form.addRow('Archive locations (one per line)', widget.destinations)
+        widget.destinations = QTableWidget(0, 1)
+        table = widget.destinations
+        table.setHorizontalHeaderLabels(['Archive location'])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().hide()
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        for path in self.archive_roots():
+            row = table.rowCount()
+            table.insertRow(row)
+            table.setItem(row, 0, QTableWidgetItem(path))
+        form.addRow('Archive locations', table)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
         add = QPushButton('Add archive folder…')
         def pick_archive():
             path = choose_directory(widget, 'Archive folder', '')
             if path:
-                current = widget.destinations.toPlainText().strip()
-                widget.destinations.setPlainText(current + ('\n' if current else '') + path)
+                for row in range(table.rowCount()):
+                    if table.item(row, 0).text().strip() == path:
+                        table.selectRow(row)
+                        return
+                row = table.rowCount()
+                table.insertRow(row)
+                table.setItem(row, 0, QTableWidgetItem(path))
+                table.selectRow(row)
         add.clicked.connect(pick_archive)
-        form.addRow(add)
+        buttons.addWidget(add)
+        widget.delete_location = QPushButton('Delete selected')
+        widget.delete_location.setToolTip('Remove selected locations from settings. Folders and archived games are kept.')
+        widget.delete_location.setEnabled(False)
+        table.itemSelectionChanged.connect(lambda: widget.delete_location.setEnabled(bool(table.selectedItems())))
+        def delete_selected():
+            for row in sorted({item.row() for item in table.selectedItems()}, reverse=True):
+                table.removeRow(row)
+        widget.delete_location.clicked.connect(delete_selected)
+        buttons.addWidget(widget.delete_location)
+        buttons.addStretch()
+        form.addRow(buttons)
         explanation = QLabel('Archives copy the entire installation folder, verify its files, permissions and links, then remove the original. Restore returns it to its original location. Each game folder goes directly inside the selected archive location.')
         explanation.setWordWrap(True)
         form.addRow(explanation)
         return widget
 
     def save_settings(self, widget):
-        roots = list(dict.fromkeys(line.strip() for line in widget.destinations.toPlainText().splitlines() if line.strip()))
+        roots = list(dict.fromkeys(widget.destinations.item(row, 0).text().strip()
+            for row in range(widget.destinations.rowCount()) if widget.destinations.item(row, 0).text().strip()))
         for value in roots:
             if not Path(value).is_absolute():
                 raise ValueError('Archiver folders must be absolute Linux paths.')

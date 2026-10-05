@@ -38,9 +38,40 @@ class ArchiverPluginTests(unittest.TestCase):
         self.assertEqual(self.plugin.archive_roots(), [str(self.root / 'archives')])
         self.assertFalse(hasattr(widget, 'root'))
         self.assertFalse(self.settings.contains('sourceRoot'))
-        widget.destinations.setPlainText('relative')
+        widget.destinations.item(0, 0).setText('relative')
         with self.assertRaises(ValueError):
             self.plugin.save_settings(widget)
+
+    def test_delete_archive_locations_removes_only_selected_entries(self):
+        paths = [self.root / name for name in ('first', 'second', 'third')]
+        for path in paths:
+            path.mkdir()
+            (path / 'keep.dat').write_bytes(b'archived data')
+        self.settings.setValue('archiveRoots', [str(path) for path in paths])
+        widget = self.plugin.create_settings()
+        self.assertFalse(widget.delete_location.isEnabled())
+        widget.destinations.item(0, 0).setSelected(True)
+        widget.destinations.item(2, 0).setSelected(True)
+        self.assertTrue(widget.delete_location.isEnabled())
+        widget.delete_location.click()
+        self.assertEqual(widget.destinations.rowCount(), 1)
+        self.assertEqual(widget.destinations.item(0, 0).text(), str(paths[1]))
+        # Changes are staged until the settings dialog is saved.
+        self.assertEqual(self.plugin.archive_roots(), [str(path) for path in paths])
+        self.plugin.save_settings(widget)
+        self.assertEqual(self.plugin.archive_roots(), [str(paths[1])])
+        for path in paths:
+            self.assertEqual((path / 'keep.dat').read_bytes(), b'archived data')
+
+    def test_adding_existing_location_selects_it_without_duplicate(self):
+        path = str(self.root / 'archive')
+        self.settings.setValue('archiveRoots', [path])
+        widget = self.plugin.create_settings()
+        from PyQt6.QtWidgets import QPushButton
+        with patch.object(self.module, 'choose_directory', return_value=path):
+            next(button for button in widget.findChildren(QPushButton) if button.text().startswith('Add archive')).click()
+        self.assertEqual(widget.destinations.rowCount(), 1)
+        self.assertTrue(widget.destinations.item(0, 0).isSelected())
 
     def test_running_game_is_rejected_before_confirmation_or_copy(self):
         window = SimpleNamespace(game_detection=SimpleNamespace(status=lambda _: 'Running'), game_providers=[])

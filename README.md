@@ -6,7 +6,9 @@ Requires Playlite 0.2.23 or later, plugin API 1.
 Install through Settings → Plugins → Available. Configure one or more archive
 locations in Settings → Plugins → General → Game Archiver. Each installation
 folder goes directly inside the selected archive location using its folder name.
-The original installation path is saved for restoration.
+The original installation path is saved for restoration. Archive locations are
+listed in a selectable table; Delete selected removes settings entries only and
+keeps the folders and their contents.
 No compression is used. Existing archive records remain supported.
 
 Select games with Ctrl-click or Shift-click in either list or grid view, then
