@@ -36,7 +36,9 @@ class ArchiverPluginTests(unittest.TestCase):
             next(button for button in widget.findChildren(QPushButton) if button.text().startswith('Add archive')).click()
         self.plugin.save_settings(widget)
         self.assertEqual(self.plugin.archive_roots(), [str(self.root / 'archives')])
-        widget.root.setText('relative')
+        self.assertFalse(hasattr(widget, 'root'))
+        self.assertFalse(self.settings.contains('sourceRoot'))
+        widget.destinations.setPlainText('relative')
         with self.assertRaises(ValueError):
             self.plugin.save_settings(widget)
 
@@ -48,14 +50,14 @@ class ArchiverPluginTests(unittest.TestCase):
             self.assertIn('Stop the game', warning.call_args.args[2])
 
     def test_archive_and_restore_through_plugin_worker(self):
-        source = self.root / 'games' / 'Example'
+        source = self.root / 'games' / 'Category' / 'Example'
         source.mkdir(parents=True)
         (source / 'game.exe').write_bytes(b'example')
         data = self.root / 'data'
         data.mkdir()
         game = dict(Id='a', Name='Example', InstallDirectory=str(source), IsInstalled=True)
         (data / 'library.json').write_text(json.dumps([game]))
-        self.settings.setValue('sourceRoot', str(source.parent))
+        self.settings.setValue('sourceRoot', str(self.root / 'games'))
         self.settings.setValue('archiveRoots', [str(self.root / 'archives')])
         window = LibraryWindow(data)
         window.game_detection.stop()
@@ -64,6 +66,8 @@ class ArchiverPluginTests(unittest.TestCase):
             self.assertTrue(self.plugin.transfer(window, game, False))
             archived = window.games[0]
             self.assertFalse(source.exists())
+            self.assertEqual(archived['ArchivePath'], str(self.root / 'archives' / 'Example'))
+            self.assertEqual(archived['ArchiveOriginalDirectory'], str(source))
             self.assertTrue(Path(archived['ArchivePath']).is_dir())
             self.assertEqual(self.plugin.game_actions(window, archived)[0][0], 'Restore game…')
             self.assertTrue(self.plugin.before_launch(window, archived))

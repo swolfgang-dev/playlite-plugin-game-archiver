@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import threading
 from PyQt6.QtCore import QObject, QSettings, QThreadPool, Qt, pyqtSignal
-from PyQt6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QPlainTextEdit,
+from PyQt6.QtWidgets import (QWidget, QFormLayout, QPlainTextEdit,
     QInputDialog, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox)
 from playlite.providers import GenericPlugin, IntegrationPlugin
 from playlite.lifecycle import run_dialog, show_warning, choose_directory
@@ -25,18 +25,7 @@ class Plugin(GenericPlugin):
     def create_settings(self, parent=None):
         widget = QWidget(parent)
         form = QFormLayout(widget)
-        widget.root = QLineEdit(self.settings().value('sourceRoot', str(Path.home() / 'Games')))
         widget.destinations = QPlainTextEdit('\n'.join(self.archive_roots()))
-        row = QHBoxLayout()
-        row.addWidget(widget.root)
-        browse = QPushButton('Browse…')
-        def pick_root():
-            path = choose_directory(widget, 'Game library root', widget.root.text())
-            if path:
-                widget.root.setText(path)
-        browse.clicked.connect(pick_root)
-        row.addWidget(browse)
-        form.addRow('Game library root (optional)', row)
         form.addRow('Archive locations (one per line)', widget.destinations)
         add = QPushButton('Add archive folder…')
         def pick_archive():
@@ -46,21 +35,20 @@ class Plugin(GenericPlugin):
                 widget.destinations.setPlainText(current + ('\n' if current else '') + path)
         add.clicked.connect(pick_archive)
         form.addRow(add)
-        explanation = QLabel('Archives copy the entire installation folder, verify its files, permissions and links, then remove the original. Restore returns it to its original location. The optional library root preserves relative folder names; games outside it are supported too.')
+        explanation = QLabel('Archives copy the entire installation folder, verify its files, permissions and links, then remove the original. Restore returns it to its original location. Each game folder goes directly inside the selected archive location.')
         explanation.setWordWrap(True)
         form.addRow(explanation)
         return widget
 
     def save_settings(self, widget):
-        root = widget.root.text().strip()
         roots = list(dict.fromkeys(line.strip() for line in widget.destinations.toPlainText().splitlines() if line.strip()))
-        for value in ([root] if root else []) + roots:
+        for value in roots:
             if not Path(value).is_absolute():
                 raise ValueError('Archiver folders must be absolute Linux paths.')
             if Path(value).exists() and not Path(value).is_dir():
                 raise ValueError('Archive locations must be folders.')
         settings = self.settings()
-        settings.setValue('sourceRoot', root)
+        settings.remove('sourceRoot')
         settings.setValue('archiveRoots', roots)
         settings.sync()
 
@@ -107,7 +95,6 @@ class Plugin(GenericPlugin):
                 raise ValueError('Another archive or restore operation is already running.')
             for game in games:
                 self.ensure_stopped(window, game)
-            root = self.settings().value('sourceRoot', '', type=str)
             chosen = None
             if not restore:
                 roots = self.archive_roots()
@@ -124,8 +111,7 @@ class Plugin(GenericPlugin):
                         raise ValueError('Set the original installation folder before restoring.')
                 else:
                     source = Path(game['InstallDirectory']).resolve()
-                    relative = source.relative_to(Path(root).resolve()) if root and source != Path(root).resolve() and source.is_relative_to(Path(root).resolve()) else Path(source.name)
-                    destination = str(Path(chosen) / relative)
+                    destination = str(Path(chosen) / source.name)
                 jobs.append((dict(game), destination))
             title = 'Restore games' if restore else 'Archive games'
             if confirm and QMessageBox.question(window, title, f'{title} for {len(jobs)} selected game(s)?\n\nEach folder is copied to a temporary destination and verified before its original is removed.') != QMessageBox.StandardButton.Yes:
