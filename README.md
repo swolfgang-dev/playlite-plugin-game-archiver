@@ -1,7 +1,7 @@
 # Game Archiver for Playlite
 
 Verified folder archive and restore operations, including selections of games.
-Requires Playlite 0.2.23 or later, plugin API 1.
+Requires Playlite 0.2.41 or later, plugin API 1.
 
 Install through Settings → Plugins → Available. Configure one or more archive
 locations in Settings → Plugins → General → Game Archiver. Each installation

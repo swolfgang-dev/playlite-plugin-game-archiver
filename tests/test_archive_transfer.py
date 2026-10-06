@@ -1,12 +1,12 @@
 from plugin_test_support import require_plugin
-require_plugin('PlayliteArchiver')
+require_plugin('GameArchiver')
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import threading
 import unittest
 from unittest.mock import patch
-from playlite_plugins.playlitearchiver.transfer import transfer_game
+from playlite_plugins.gamearchiver.transfer import transfer_game
 
 
 class ArchiveTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class ArchiveTests(unittest.TestCase):
             if Path(args[0]) == self.source:
                 record_playtime(self.data, [self.game], self.game['Id'], 30, 1, '2026-10-04T12:00:00+00:00')
             return result
-        with patch('playlite_plugins.playlitearchiver.transfer.shutil.copytree', side_effect=copy_with_history):
+        with patch('playlite_plugins.gamearchiver.transfer.shutil.copytree', side_effect=copy_with_history):
             games, _ = transfer_game(self.data, self.game, self.target)
         self.assertEqual(games[0]['Playtime'], 30)
         self.assertEqual(games[0]['PlayCount'], 1)
@@ -72,7 +72,7 @@ class ArchiveTests(unittest.TestCase):
             result = original(*args, **kwargs)
             (self.data / 'library.json').write_text('[]')
             return result
-        with patch('playlite_plugins.playlitearchiver.transfer.shutil.copytree', side_effect=copy_then_delete):
+        with patch('playlite_plugins.gamearchiver.transfer.shutil.copytree', side_effect=copy_then_delete):
             with self.assertRaisesRegex(ValueError, 'Source kept'):
                 transfer_game(self.data, self.game, self.target)
         self.assertTrue(self.source.exists())
@@ -104,7 +104,7 @@ class ArchiveTests(unittest.TestCase):
             result = original(*args, **kwargs)
             (Path(args[1]) / 'game.exe').write_bytes(b'corrupted')
             return result
-        with patch('playlite_plugins.playlitearchiver.transfer.shutil.copytree', side_effect=corrupt):
+        with patch('playlite_plugins.gamearchiver.transfer.shutil.copytree', side_effect=corrupt):
             with self.assertRaisesRegex(ValueError, 'verification failed'):
                 transfer_game(self.data, self.game, self.target)
         self.assertEqual((self.source / 'game.exe').read_bytes(), b'example game contents')
@@ -112,7 +112,7 @@ class ArchiveTests(unittest.TestCase):
         self.assertFalse(list(self.target.parent.glob('*.partial-*')))
 
     def test_library_commit_failure_restores_quarantined_source(self):
-        from playlite_plugins.playlitearchiver import transfer
+        from playlite_plugins.gamearchiver import transfer
         original = transfer.atomic_json
         def fail_library(path, value):
             if path.name == 'library.json':
@@ -134,14 +134,14 @@ class ArchiveTests(unittest.TestCase):
             if Path(args[0]) == self.source:
                 self.target.mkdir()
             return result
-        with patch('playlite_plugins.playlitearchiver.transfer.shutil.copytree', side_effect=collision):
+        with patch('playlite_plugins.gamearchiver.transfer.shutil.copytree', side_effect=collision):
             with self.assertRaisesRegex(ValueError, 'Destination appeared'):
                 transfer_game(self.data, self.game, self.target)
         self.assertTrue(self.source.exists())
         self.assertTrue(self.target.is_dir())
 
     def test_interrupted_uncommitted_quarantine_is_recovered(self):
-        from playlite_plugins.playlitearchiver.transfer import recover_transfers
+        from playlite_plugins.gamearchiver.transfer import recover_transfers
         quarantine = self.source.with_name('interrupted')
         self.source.rename(quarantine)
         folder = self.data / 'archive-transfers'

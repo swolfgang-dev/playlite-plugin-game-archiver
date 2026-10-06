@@ -19,7 +19,7 @@ class ArchiverPluginTests(unittest.TestCase):
     def setUp(self):
         self.directory = TemporaryDirectory()
         self.root = Path(self.directory.name)
-        self.plugin = discover_plugins()['PlayliteArchiver']
+        self.plugin = discover_plugins()['GameArchiver']
         self.module = importlib.import_module(self.plugin.__class__.__module__)
         self.settings = QSettings(str(self.root / 'archiver.ini'), QSettings.Format.IniFormat)
         self.plugin.settings = lambda: self.settings

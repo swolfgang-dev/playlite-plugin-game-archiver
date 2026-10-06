@@ -2,9 +2,10 @@
 import json
 from pathlib import Path
 import threading
-from PyQt6.QtCore import QObject, QSettings, QThreadPool, Qt, pyqtSignal
+from PyQt6.QtGui import QIcon, QDesktopServices
+from PyQt6.QtCore import QUrl, QObject, QSettings, QThreadPool, Qt, pyqtSignal
 from PyQt6.QtWidgets import (QWidget, QFormLayout, QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView,
-    QInputDialog, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox)
+    QCheckBox, QLineEdit, QInputDialog, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox)
 from playlite.providers import GenericPlugin, IntegrationPlugin
 from playlite.lifecycle import run_dialog, show_warning, choose_directory
 
@@ -14,6 +15,87 @@ class Progress(QObject):
 
 
 class Plugin(GenericPlugin):
+    def augment_editor(self, editor):
+        game = editor.game
+        installation = editor.installation_form
+        if not hasattr(editor, 'installation_plugin'):
+            installation.addRow(QLabel('Archive information'))
+            editor.archived = QCheckBox('Archived')
+            editor.archived.setChecked(bool(game.get('ArchivePath')))
+            editor.archive_path = QLineEdit(game.get('ArchivePath') or '')
+            editor.archive_path.setPlaceholderText('Folder containing this archived game')
+            archive_row = QHBoxLayout()
+            archive_row.setContentsMargins(0, 0, 0, 0)
+            archive_row.setSpacing(8)
+            archive_row.addWidget(editor.archive_path)
+            archive_browse = QPushButton('Browse…')
+            archive_browse.setFixedHeight(40)
+            def choose_archive():
+                path = choose_directory(editor, 'Archived game folder', editor.archive_path.text())
+                if path:
+                    editor.archive_path.setText(path)
+            archive_browse.clicked.connect(choose_archive)
+            archive_row.addWidget(archive_browse)
+            installation.addRow(editor.archived)
+            installation.addRow('Archive folder', archive_row)
+            note = QLabel('This records archive information. Changing these fields does not move files. Restore returns the game to its installation folder.')
+            note.setWordWrap(True)
+            installation.addRow(note)
+
+    def collect_editor(self, editor, result):
+        if hasattr(editor, 'archived'):
+            if editor.archived.isChecked():
+                archive = editor.archive_path.text().strip()
+                original = result.get('InstallDirectory') or ''
+                if not archive or not Path(archive).is_absolute() or not original or not Path(original).is_absolute():
+                    raise ValueError('Archived games need absolute archive and original installation folders.')
+                source, target = Path(original).resolve(), Path(archive).resolve()
+                if source == target or source in target.parents or target in source.parents:
+                    raise ValueError('Archive and installation folders must be separate.')
+                result.update(ArchivePath=archive, ArchiveOriginalDirectory=original, IsInstalled=False)
+                result['Tags'] = list(dict.fromkeys((result.get('Tags') or []) + ['Archived']))
+            else:
+                result.pop('ArchivePath', None)
+                result.pop('ArchiveOriginalDirectory', None)
+                result['Tags'] = [tag for tag in result.get('Tags') or [] if tag != 'Archived']
+                if editor.game.get('ArchivePath'):
+                    result['IsInstalled'] = True
+            archive_keys = ('ArchivePath', 'ArchiveOriginalDirectory')
+            if any(result.get(key) != editor.game.get(key) for key in archive_keys):
+                result['_ArchiveEditBase'] = {key: editor.game.get(key) for key in archive_keys}
+
+    def prepare_edit_save(self, previous, result):
+        archive_edit = result.pop('_ArchiveEditBase', None)
+        if archive_edit is not None:
+            current_archive = {key: previous.get(key) for key in ('ArchivePath', 'ArchiveOriginalDirectory')}
+            if current_archive != archive_edit:
+                raise ValueError('Archive information changed while editing. Reopen the editor before changing it.')
+        if previous and archive_edit is None:
+            # Archive state belongs to the archiver, not a stale editor snapshot.
+            for key in ('ArchivePath', 'ArchiveOriginalDirectory'):
+                if key in previous:
+                    result[key] = previous[key]
+                else:
+                    result.pop(key, None)
+            if previous.get('ArchivePath'):
+                result['IsInstalled'] = False
+                result['Tags'] = list(dict.fromkeys((result.get('Tags') or []) + ['Archived']))
+
+    def augment_game_view(self, window, game, heading, installation_form):
+        if game.get('ArchivePath'):
+            badge = QLabel('Archived')
+            badge.setObjectName('archiveIndicator')
+            badge.setToolTip(game['ArchivePath'])
+            archive_icon = QLabel()
+            archive_icon.setPixmap(QIcon(str(Path(__file__).parent / 'assets/archive.svg')).pixmap(20, 20))
+            heading.addWidget(archive_icon)
+            heading.addWidget(badge)
+        if game.get('ArchivePath'):
+            archived = QPushButton(game['ArchivePath'])
+            archived.setToolTip(game['ArchivePath'])
+            archived.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(game['ArchivePath'])))
+            installation_form.addRow(QLabel('Archive'), archived)
+
     def settings(self):
         return QSettings('Playlite', 'Archiver')
 
