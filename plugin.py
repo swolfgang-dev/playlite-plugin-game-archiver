@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import threading
+import shutil
 from PyQt6.QtGui import QIcon, QDesktopServices
 from PyQt6.QtCore import QUrl, QObject, QSettings, QThreadPool, Qt, pyqtSignal
 from PyQt6.QtWidgets import (QWidget, QFormLayout, QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView,
@@ -112,6 +113,7 @@ class Plugin(GenericPlugin):
         table.setHorizontalHeaderLabels(['Archive location'])
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         table.verticalHeader().hide()
+        table.setMaximumHeight(160)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         for path in self.archive_roots():
@@ -211,7 +213,7 @@ class Plugin(GenericPlugin):
             if not restore:
                 roots = self.archive_roots()
                 if not roots:
-                    raise ValueError('Set an archive location in Settings → Plugins → General → Game Archiver first.')
+                    raise ValueError('Set an archive location in Settings → Plugins → Game Archiver first.')
                 chosen, accepted = QInputDialog.getItem(window, 'Archive destination', 'Archive location', roots, editable=False)
                 if not accepted:
                     return False
@@ -225,8 +227,16 @@ class Plugin(GenericPlugin):
                     source = Path(game['InstallDirectory']).resolve()
                     destination = str(Path(chosen) / source.name)
                 jobs.append((dict(game), destination))
+            capacity = []
+            for game, destination in jobs:
+                parent = Path(destination).parent
+                while not parent.exists() and parent != parent.parent: parent = parent.parent
+                free = shutil.disk_usage(parent).free / (1024 ** 3)
+                estimate = game.get('InstallSize')
+                size = f'{estimate / (1024 ** 3):.2f} GiB' if isinstance(estimate,(int,float)) else 'calculated during verification'
+                capacity.append(f"{game['Name']}: size {size}; destination has {free:.2f} GiB free")
             title = 'Restore games' if restore else 'Archive games'
-            if confirm and QMessageBox.question(window, title, f'{title} for {len(jobs)} selected game(s)?\n\nEach folder is copied to a temporary destination and verified before its original is removed.') != QMessageBox.StandardButton.Yes:
+            if confirm and QMessageBox.question(window, title, f'{title} for {len(jobs)} selected game(s)?\n\n' + '\n\n'.join(game['Name'] + '\nFrom: ' + str(game.get('ArchivePath') if restore else game.get('InstallDirectory')) + '\nTo: ' + str(destination) for game, destination in jobs) + '\n\n' + '\n'.join(capacity) + '\n\nEach folder is copied and verified before its original is removed.') != QMessageBox.StandardButton.Yes:
                 return False
         except (ValueError, KeyError, OSError) as error:
             show_warning(window, 'Cannot transfer games', str(error))

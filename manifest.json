@@ -1,12 +1,12 @@
 {
   "id": "GameArchiver",
   "name": "Game Archiver",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "api_version": 1,
   "type": "generic",
   "enabled": true,
   "repository": "swolfgang-dev/playlite-plugin-game-archiver",
-  "minimum_playlite_version": "0.2.44",
+  "minimum_playlite_version": "0.2.74",
   "description": "Verified game-folder archive and restore operations.",
   "settings_groups": [
     "Archiver"
