@@ -1,6 +1,7 @@
 """Install source test fixtures into an isolated plugin directory."""
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,6 +12,10 @@ parser.add_argument('core', type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 identity = json.loads((root / 'manifest.json').read_text())['id']
+if os.environ.get('PLAYLITE_PROFILE') != 'test' or any(
+        not os.environ.get(key) or not Path(os.environ[key]).is_absolute()
+        for key in ('XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_STATE_HOME')):
+    raise RuntimeError('Fixture installation requires PLAYLITE_PROFILE=test and explicit isolated XDG data/config/state folders.')
 with __import__('tempfile').TemporaryDirectory() as temporary:
     pending = []
     for entry in json.loads((args.core / 'catalogue.json').read_text())['plugins']:

@@ -11,6 +11,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
+      PLAYLITE_PROFILE: test
       QT_QPA_PLATFORM: offscreen
       XDG_DATA_HOME: ${{ github.workspace }}/test-data
       XDG_CONFIG_HOME: ${{ github.workspace }}/test-config
