@@ -50,6 +50,34 @@ class ArchiveTests(unittest.TestCase):
             transfer_game(self.data, self.game, self.source / 'archive')
         self.assertTrue((self.source / 'game.exe').is_file())
 
+    def test_symlinked_lock_is_rejected_without_touching_its_target(self):
+        outside = self.root / 'outside'
+        outside.write_bytes(b'unchanged')
+        (self.source / '.playlite-steamautocrack.lock').symlink_to(outside)
+        with self.assertRaisesRegex(ValueError, 'lock cannot be a symlink'):
+            transfer_game(self.data, self.game, self.target)
+        self.assertEqual(outside.read_bytes(), b'unchanged')
+        self.assertTrue(self.source.exists())
+        self.assertFalse(self.target.exists())
+
+    def test_durability_failure_after_library_commit_keeps_recovery_copy(self):
+        from playlite_plugins.gamearchiver import transfer
+        original = transfer.sync_path
+        def fail_library_sync(path, directory=False):
+            if Path(path) == self.data / 'library.json':
+                raise OSError('sync failed')
+            return original(path, directory)
+        with patch.object(transfer, 'sync_path', side_effect=fail_library_sync):
+            with self.assertRaisesRegex(OSError, 'sync failed'):
+                transfer_game(self.data, self.game, self.target)
+        saved = json.loads((self.data / 'library.json').read_text())[0]
+        self.assertEqual(saved['ArchivePath'], str(self.target))
+        self.assertFalse(self.source.exists())
+        self.assertEqual((self.target / 'game.exe').read_bytes(), b'example game contents')
+        quarantines = list(self.source.parent.glob('*.moving-*'))
+        self.assertEqual(len(quarantines), 1)
+        self.assertEqual((quarantines[0] / 'game.exe').read_bytes(), b'example game contents')
+
     def test_playtime_changes_during_copy_are_preserved(self):
         import shutil
         from playlite.game_detection import record_playtime

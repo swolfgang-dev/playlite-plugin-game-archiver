@@ -117,6 +117,8 @@ def transfer_game(data, game, destination, restore=False, cancel=None, progress=
         recover_transfers(data)
         if not source.is_absolute() or source.is_symlink() or not source.is_dir():
             raise ValueError('Select an existing absolute game directory.')
+        if (source / '.playlite-steamautocrack.lock').is_symlink():
+            raise ValueError('The game lock cannot be a symlink.')
         with (source / '.playlite-steamautocrack.lock').open('a') as game_lock:
             try:
                 fcntl.flock(game_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -194,9 +196,11 @@ def _transfer_game(data, game, destination, restore=False, cancel=None, progress
                 saved['Tags'] = list(dict.fromkeys(tags + ['Archived']))
             shutil.copy2(path, path.with_suffix('.json.bak'))
             atomic_json(path, games)
+            # Replacement is now visible. A later durability-check failure must
+            # not restore a source that the saved library already calls archived.
+            committed = True
             sync_path(path)
             sync_path(path.parent, directory=True)
-            committed = True
         progress('Removing the verified original copy…')
         try:
             shutil.rmtree(quarantine)

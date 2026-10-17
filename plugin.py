@@ -207,7 +207,7 @@ class Plugin(GenericPlugin):
 
     def transfer_games(self, window, games, restore, confirm=True):
         from .transfer import transfer_game
-        from playlite.metadata_dialog import Task
+        from playlite.tasks import Task
         try:
             if getattr(self, '_transferring', False):
                 raise ValueError('Another archive or restore operation is already running.')
@@ -248,6 +248,10 @@ class Plugin(GenericPlugin):
         cancel = threading.Event()
         class TransferDialog(QDialog):
             busy = True
+            def shutdown_pending(self):
+                return self.busy
+            def request_shutdown(self):
+                self.reject()
             def reject(self):
                 if self.busy:
                     cancel.set()
@@ -269,6 +273,9 @@ class Plugin(GenericPlugin):
         updates = Progress(dialog)
         updates.changed.connect(status.setText)
         results = []
+        registry = getattr(window, 'background_tasks', None)
+        task_id = registry.update(title=title, kind='Archive', state='Running',
+                                  summary=f'Transferring {len(jobs)} game(s).', cancel=cancel.set) if registry else None
         # Recheck running state immediately before each transfer.
         def perform():
             from playlite.library_storage import library_lock
@@ -293,23 +300,32 @@ class Plugin(GenericPlugin):
         success = []
         self._transferring = True
         def finished(result):
-            window.games = json.loads((window.data / 'library.json').read_text())
             self._transferring = False
             dialog.busy = False
-            window.update_filter_choices()
-            window.refresh_library()
-            success.append(all(ok for _, ok, _ in result))
-            dialog.accept()
             problems = [f'{name}: {message}' for name, ok, message in result if not ok or 'redundant copy' in message]
-            if problems:
+            try:
+                window.games = json.loads((window.data / 'library.json').read_text())
+                window.update_filter_choices()
+                window.refresh_library()
+            except (OSError, ValueError) as error:
+                problems.append('Could not reload the saved library: ' + str(error))
+            success.append(all(ok for _, ok, _ in result) and not problems)
+            if registry:
+                registry.update(task_id, state='Failed' if problems else 'Complete', cancel=None,
+                                summary='Transfer needs attention.' if problems else 'Transfer complete.',
+                                details='\n'.join(f'{name}: {message}' for name, _, message in result) + '\n' + '\n'.join(problems))
+            dialog.accept()
+            if problems and not getattr(getattr(window, 'lifecycle', None), 'quitting', False):
                 show_warning(window, 'Transfer results', '\n'.join(problems))
         def failed(error):
             self._transferring = False
             dialog.busy = False
+            if registry:
+                registry.update(task_id, state='Failed', summary='Transfer failed.', details=error, cancel=None)
             dialog.accept()
-            show_warning(window, 'Transfer failed', error)
-        task.signals.succeeded.connect(finished)
-        task.signals.failed.connect(failed)
+            if not getattr(getattr(window, 'lifecycle', None), 'quitting', False):
+                show_warning(window, 'Transfer failed', error)
+        task.bind(dialog, finished, failed)
         dialog.finished.connect(lambda: cancel.set())
         dialog.task = task
         QThreadPool.globalInstance().start(task)
