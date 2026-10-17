@@ -153,7 +153,7 @@ class Plugin(GenericPlugin):
         form.addRow(explanation)
         return widget
 
-    def save_settings(self, widget):
+    def validate_settings(self, widget):
         roots = list(dict.fromkeys(widget.destinations.item(row, 0).text().strip()
             for row in range(widget.destinations.rowCount()) if widget.destinations.item(row, 0).text().strip()))
         for value in roots:
@@ -161,6 +161,10 @@ class Plugin(GenericPlugin):
                 raise ValueError('Archiver folders must be absolute Linux paths.')
             if Path(value).exists() and not Path(value).is_dir():
                 raise ValueError('Archive locations must be folders.')
+        return roots
+
+    def save_settings(self, widget):
+        roots = self.validate_settings(widget)
         settings = self.settings()
         settings.remove('sourceRoot')
         settings.setValue('archiveRoots', roots)
